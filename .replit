@@ -1,0 +1,15 @@
+modules = ["go-1.21", "nodejs-20"]
+[run]
+module = "frontend/index.html"
+workdir = "."
+entrypoint = "vite dev --host 0.0.0.0"
+
+[packager]
+language = "nodejs"
+
+[packager.features]
+packageSearch = true
+guessImports = true
+
+[nix]
+channel = "stable-24_05"
