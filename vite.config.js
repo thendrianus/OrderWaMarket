@@ -3,11 +3,15 @@ import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import sveltePreprocess from "svelte-preprocess";
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  plugins: [svelte()],
+  plugins: [svelte({
+    preprocess: sveltePreprocess(),
+  })],
   server: {
     port: 3000,
     host: '0.0.0.0',
