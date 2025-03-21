@@ -35,6 +35,15 @@ mode = "sequential"
 task = "shell.exec"
 args = "npm run dev"
 
+[[workflows.workflow]]
+name = "Run Frontend Dev"
+author = 40597801
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev -- --host 0.0.0.0"
+
 [[ports]]
 localPort = 8080
 externalPort = 80
