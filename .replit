@@ -13,3 +13,24 @@ guessImports = true
 
 [nix]
 channel = "stable-24_05"
+
+[workflows]
+runButton = "Run Backend"
+
+[[workflows.workflow]]
+name = "Run Backend"
+author = 40597801
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && go run main.go"
+
+[[workflows.workflow]]
+name = "Run Frontend"
+author = 40597801
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev"
