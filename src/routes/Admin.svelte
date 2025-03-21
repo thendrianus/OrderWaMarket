@@ -2,220 +2,159 @@
   import { onMount } from 'svelte';
   import { push } from 'svelte-spa-router';
   
-  // Login form data
   let username = '';
   let password = '';
-  let isLoggingIn = true;
-  let isLoading = false;
-  let error = '';
+  let error = null;
+  let loading = false;
   
-  // Registration form data
-  let name = '';
-  let whatsappNumber = '';
-  let confirmPassword = '';
-  
-  // Handle form submission
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    error = '';
-    isLoading = true;
-    
-    try {
-      if (isLoggingIn) {
-        // Login
-        if (!username || !password) {
-          throw new Error('Please enter both username and password');
-        }
-        
-        // In a real app, we would make an API call to the backend
-        // For now, we'll mock a successful login
-        localStorage.setItem('auth_token', 'dummy_token');
-        push('/admin/dashboard');
-      } else {
-        // Registration
-        if (!username || !password || !name || !whatsappNumber || !confirmPassword) {
-          throw new Error('Please fill in all fields');
-        }
-        
-        if (password !== confirmPassword) {
-          throw new Error('Passwords do not match');
-        }
-        
-        if (whatsappNumber && !whatsappNumber.startsWith('+')) {
-          throw new Error('WhatsApp number should start with country code (e.g. +62)');
-        }
-        
-        // In a real app, we would make an API call to the backend
-        // For now, we'll mock a successful registration
-        localStorage.setItem('auth_token', 'dummy_token');
-        push('/admin/dashboard');
-      }
-    } catch (err) {
-      error = err.message;
-    } finally {
-      isLoading = false;
-    }
-  };
-  
-  // Check if already logged in
+  // Check if user is already logged in
   onMount(() => {
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('whatsapp_catalogue_token');
     if (token) {
+      // Redirect to dashboard if token exists
       push('/admin/dashboard');
     }
   });
+  
+  async function handleLogin(event) {
+    event.preventDefault();
+    
+    if (!username || !password) {
+      error = 'Please enter both username and password';
+      return;
+    }
+    
+    loading = true;
+    error = null;
+    
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ username, password })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Login failed');
+      }
+      
+      // Save token and user info to localStorage
+      localStorage.setItem('whatsapp_catalogue_token', data.token);
+      localStorage.setItem('whatsapp_catalogue_user', JSON.stringify(data.user));
+      
+      // Redirect to dashboard
+      push('/admin/dashboard');
+    } catch (err) {
+      console.error('Login error:', err);
+      error = err.message || 'Failed to login. Please try again.';
+    } finally {
+      loading = false;
+    }
+  }
+  
+  function goToRegister() {
+    push('/admin/register');
+  }
 </script>
 
-<div class="min-h-screen bg-gray-50 flex flex-col">
-  <header class="bg-primary text-white py-4">
-    <div class="container-custom">
-      <div class="flex justify-between items-center">
-        <h1 class="text-xl font-bold">WhatsApp Catalogue</h1>
-        <button 
-          class="text-white hover:underline"
-          on:click={() => push('/')}
-        >
-          Back to Home
-        </button>
-      </div>
+<div class="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+  <div class="max-w-md w-full space-y-8">
+    <div>
+      <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+        Admin Login
+      </h2>
+      <p class="mt-2 text-center text-sm text-gray-600">
+        Sign in to manage your store catalogue
+      </p>
     </div>
-  </header>
-  
-  <main class="flex-grow flex items-center justify-center py-12 px-4">
-    <div class="bg-white rounded-lg shadow-md p-8 max-w-md w-full">
-      <!-- Form Header -->
-      <div class="text-center mb-8">
-        <h2 class="text-2xl font-bold text-gray-800">
-          {isLoggingIn ? 'Sign In to Your Account' : 'Create a New Account'}
-        </h2>
-        <p class="text-gray-600 mt-2">
-          {isLoggingIn ? 'Manage your store and products' : 'Start selling your products with WhatsApp'}
-        </p>
+    
+    {#if error}
+      <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+        <span class="block sm:inline">{error}</span>
       </div>
-      
-      <!-- Error Message -->
-      {#if error}
-        <div class="bg-red-100 text-red-800 px-4 py-3 rounded-md mb-4">
-          {error}
-        </div>
-      {/if}
-      
-      <!-- Form -->
-      <form on:submit={handleSubmit}>
-        {#if !isLoggingIn}
-          <!-- Store Name (Registration only) -->
-          <div class="mb-4">
-            <label for="name" class="block text-gray-700 mb-1 font-medium">Store Name</label>
-            <input
-              type="text"
-              id="name"
-              bind:value={name}
-              class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="e.g. Toko Sembako Jaya"
-            />
-          </div>
-          
-          <!-- WhatsApp Number (Registration only) -->
-          <div class="mb-4">
-            <label for="whatsappNumber" class="block text-gray-700 mb-1 font-medium">WhatsApp Number</label>
-            <input
-              type="text"
-              id="whatsappNumber"
-              bind:value={whatsappNumber}
-              class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="e.g. +628123456789"
-            />
-            <p class="text-xs text-gray-500 mt-1">Include your country code (e.g. +62 for Indonesia)</p>
-          </div>
-        {/if}
-        
-        <!-- Username field -->
-        <div class="mb-4">
-          <label for="username" class="block text-gray-700 mb-1 font-medium">Username</label>
-          <input
-            type="text"
-            id="username"
+    {/if}
+    
+    <form class="mt-8 space-y-6" on:submit={handleLogin}>
+      <div class="rounded-md shadow-sm -space-y-px">
+        <div>
+          <label for="username" class="sr-only">Username</label>
+          <input 
+            id="username" 
+            name="username" 
+            type="text" 
             bind:value={username}
-            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-            placeholder="Enter your username"
-          />
+            required 
+            class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-[#25D366] focus:border-[#25D366] focus:z-10 sm:text-sm" 
+            placeholder="Username"
+          >
         </div>
-        
-        <!-- Password field -->
-        <div class="mb-4">
-          <label for="password" class="block text-gray-700 mb-1 font-medium">Password</label>
-          <input
-            type="password"
-            id="password"
+        <div>
+          <label for="password" class="sr-only">Password</label>
+          <input 
+            id="password" 
+            name="password" 
+            type="password" 
             bind:value={password}
-            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-            placeholder="Enter your password"
-          />
+            required 
+            class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-[#25D366] focus:border-[#25D366] focus:z-10 sm:text-sm" 
+            placeholder="Password"
+          >
         </div>
-        
-        {#if !isLoggingIn}
-          <!-- Confirm Password field (Registration only) -->
-          <div class="mb-4">
-            <label for="confirmPassword" class="block text-gray-700 mb-1 font-medium">Confirm Password</label>
-            <input
-              type="password"
-              id="confirmPassword"
-              bind:value={confirmPassword}
-              class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Confirm your password"
-            />
-          </div>
-        {/if}
-        
-        <!-- Submit button -->
-        <button
-          type="submit"
-          class="btn btn-primary w-full py-2.5 mt-2"
-          disabled={isLoading}
+      </div>
+
+      <div class="flex items-center justify-end">
+        <div class="text-sm">
+          <button 
+            type="button" 
+            on:click={goToRegister}
+            class="font-medium text-[#25D366] hover:text-[#128C7E]"
+          >
+            Create new account?
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <button 
+          type="submit" 
+          disabled={loading}
+          class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-[#25D366] hover:bg-[#128C7E] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#25D366] disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {#if isLoading}
-            <span class="inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span>
-            {isLoggingIn ? 'Signing In...' : 'Creating Account...'}
+          {#if loading}
+            <span class="absolute left-0 inset-y-0 flex items-center pl-3">
+              <div class="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
+            </span>
+            Loading...
           {:else}
-            {isLoggingIn ? 'Sign In' : 'Create Account'}
+            Sign in
           {/if}
         </button>
-      </form>
-      
-      <!-- Form footer (switch between login/register) -->
-      <div class="text-center mt-6">
-        <p class="text-gray-600">
-          {#if isLoggingIn}
-            Don't have an account?
-            <button 
-              class="text-primary font-medium hover:underline focus:outline-none"
-              on:click={() => {
-                isLoggingIn = false;
-                error = '';
-              }}
-            >
-              Register
-            </button>
-          {:else}
-            Already have an account?
-            <button 
-              class="text-primary font-medium hover:underline focus:outline-none"
-              on:click={() => {
-                isLoggingIn = true;
-                error = '';
-              }}
-            >
-              Sign In
-            </button>
-          {/if}
-        </p>
+      </div>
+    </form>
+    
+    <div class="mt-6">
+      <div class="relative">
+        <div class="absolute inset-0 flex items-center">
+          <div class="w-full border-t border-gray-300"></div>
+        </div>
+        <div class="relative flex justify-center text-sm">
+          <span class="px-2 bg-gray-50 text-gray-500">
+            Or go to
+          </span>
+        </div>
+      </div>
+      <div class="mt-6 flex justify-center">
+        <button
+          on:click={() => push('/')}
+          class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#25D366]"
+        >
+          Home Page
+        </button>
       </div>
     </div>
-  </main>
-  
-  <footer class="bg-gray-800 text-white py-4">
-    <div class="container-custom text-center">
-      <p>© 2025 WhatsApp Catalogue. All rights reserved.</p>
-    </div>
-  </footer>
+  </div>
 </div>

@@ -1,13 +1,18 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{svelte,js,ts}'],
+  content: [
+    "./index.html",
+    "./src/**/*.{svelte,js,ts,jsx,tsx}",
+  ],
   theme: {
     extend: {
       colors: {
-        primary: '#1C6758',
-        secondary: '#3D8361',
-        accent: '#EEF2E6',
-        neutral: '#D6CDA4',
+        whatsapp: {
+          green: '#25D366',
+          lightGreen: '#DCF8C6',
+          teal: '#128C7E',
+          blue: '#34B7F1',
+        }
       },
       fontFamily: {
         sans: ['Inter', 'sans-serif'],
@@ -15,4 +20,4 @@ export default {
     },
   },
   plugins: [],
-};
+}

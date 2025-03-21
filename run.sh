@@ -1,26 +1,23 @@
 #!/bin/bash
 
-# Start the frontend server in the background
-echo "Starting Vite frontend server..."
-npm run dev -- --host 0.0.0.0 &
+# Set environment variables from .env file if it exists
+if [ -f .env ]; then
+  export $(cat .env | xargs)
+fi
+
+# Start the frontend
+echo "Starting frontend with Vite..."
+npx vite --port 3000 --host 0.0.0.0 &
 FRONTEND_PID=$!
 
-# Start the backend server in the background
-echo "Starting Go backend server..."
-cd backend
-go run main.go &
-BACKEND_PID=$!
+# Wait for frontend to start
+sleep 2
 
-# Handle application shutdown
-function cleanup {
-  echo "Shutting down servers..."
-  kill $FRONTEND_PID
-  kill $BACKEND_PID
-  exit 0
-}
+echo "Frontend running on http://localhost:3000"
+echo "Press Ctrl+C to stop all services"
 
-# Attach the cleanup function to SIGINT (Ctrl+C) and SIGTERM signals
-trap cleanup SIGINT SIGTERM
+# Catch Ctrl+C to properly kill processes
+trap "kill $FRONTEND_PID; echo 'All services stopped'; exit" INT
 
-# Keep the script running
-wait $FRONTEND_PID $BACKEND_PID
+# Keep script running
+wait

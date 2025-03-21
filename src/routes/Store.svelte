@@ -1,414 +1,450 @@
 <script>
   import { onMount } from 'svelte';
-  import { push, location } from 'svelte-spa-router';
+  import { location } from 'svelte-spa-router';
   
-  // State
+  // Get store ID from the route parameters
+  $: storeId = $location.split('/').pop();
+  
   let store = null;
   let products = [];
-  let categories = [];
-  let isLoading = true;
-  let error = null;
-  
-  // Filter states
-  let selectedCategory = 'all';
-  let searchQuery = '';
-  
-  // Cart state
+  let selectedProducts = [];
   let cart = [];
-  let showCart = false;
+  let loading = {
+    store: true,
+    products: true
+  };
+  let error = {
+    store: null,
+    products: null
+  };
   
-  // Format price to IDR
-  const formatPrice = (price) => {
+  // Format price to Indonesian Rupiah
+  function formatPrice(price) {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0
     }).format(price);
-  };
+  }
   
-  // Filter products by category and search query
-  $: filteredProducts = products.filter(product => {
-    // Category filter
-    const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
+  // Add product to cart
+  function addToCart(product) {
+    const existingItem = cart.find(item => item.id === product.id);
     
-    // Search filter
-    const matchesSearch = searchQuery === '' || 
-      product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      product.description.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    return matchesCategory && matchesSearch;
-  });
-  
-  // Add to cart
-  const addToCart = (product) => {
-    const existingIndex = cart.findIndex(item => item.id === product.id);
-    
-    if (existingIndex !== -1) {
-      // Product already in cart, increment quantity
-      cart[existingIndex].quantity += 1;
-      cart = [...cart]; // Trigger reactivity
+    if (existingItem) {
+      cart = cart.map(item => 
+        item.id === product.id 
+          ? { ...item, quantity: item.quantity + 1 } 
+          : item
+      );
     } else {
-      // Add new product to cart
       cart = [...cart, { ...product, quantity: 1 }];
     }
-  };
-  
-  // Remove from cart
-  const removeFromCart = (productId) => {
-    cart = cart.filter(item => item.id !== productId);
-  };
-  
-  // Update cart item quantity
-  const updateQuantity = (productId, newQuantity) => {
-    if (newQuantity < 1) return;
     
-    const index = cart.findIndex(item => item.id === productId);
-    if (index !== -1) {
-      cart[index].quantity = newQuantity;
-      cart = [...cart]; // Trigger reactivity
+    // Update selected products for WhatsApp order
+    selectedProducts = [...selectedProducts, product.id];
+  }
+  
+  // Remove product from cart
+  function removeFromCart(productId) {
+    const existingItem = cart.find(item => item.id === productId);
+    
+    if (existingItem && existingItem.quantity > 1) {
+      cart = cart.map(item => 
+        item.id === productId 
+          ? { ...item, quantity: item.quantity - 1 } 
+          : item
+      );
+    } else {
+      cart = cart.filter(item => item.id !== productId);
     }
-  };
+    
+    // Update selected products for WhatsApp order
+    if (selectedProducts.includes(productId)) {
+      selectedProducts = selectedProducts.filter(id => id !== productId);
+    }
+  }
   
-  // Calculate total price
-  $: totalPrice = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  // Generate WhatsApp order message
+  function generateOrderMessage() {
+    if (!store || cart.length === 0) return '';
+    
+    const storeInfo = `*Order from ${store.name}*\n\n`;
+    
+    const itemsList = cart.map(item => 
+      `*${item.name}*\n` +
+      `${formatPrice(item.price)} x ${item.quantity} = ${formatPrice(item.price * item.quantity)}`
+    ).join('\n\n');
+    
+    const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    return encodeURIComponent(
+      storeInfo + 
+      itemsList + 
+      '\n\n*Total: ' + formatPrice(total) + '*' +
+      '\n\nThank you!'
+    );
+  }
   
-  // Generate WhatsApp message from cart
-  const generateWhatsAppMessage = () => {
-    if (cart.length === 0) return '';
+  // Generate WhatsApp order URL
+  function getWhatsAppOrderUrl() {
+    if (!store || !store.whatsappNumber) return '#';
     
-    let message = `*New Order from ${store.name}*\n\n`;
-    
-    // Add each item
-    cart.forEach((item, index) => {
-      message += `${index + 1}. ${item.name} (${item.quantity}x) - ${formatPrice(item.price * item.quantity)}\n`;
-    });
-    
-    // Add total
-    message += `\n*Total: ${formatPrice(totalPrice)}*`;
-    
-    return encodeURIComponent(message);
-  };
+    const message = generateOrderMessage();
+    return `https://wa.me/${store.whatsappNumber}?text=${message}`;
+  }
   
-  // Checkout via WhatsApp
-  const checkoutViaWhatsApp = () => {
-    if (!store || !store.whatsappNumber || cart.length === 0) return;
+  // Fetch store data
+  async function fetchStore() {
+    loading.store = true;
+    error.store = null;
     
-    const message = generateWhatsAppMessage();
-    const whatsappUrl = `https://wa.me/${store.whatsappNumber.replace(/\+/g, '')}?text=${message}`;
-    
-    window.open(whatsappUrl, '_blank');
-  };
-  
-  // Load store data
-  onMount(async () => {
     try {
-      // Extract store ID from URL
-      const storeId = $location.split('/').pop();
+      const response = await fetch(`/api/stores/${storeId}`);
       
-      // In a real app, we would fetch the data from the backend API
-      // For now, we'll use demo data
-      setTimeout(() => {
-        store = {
-          id: 'demo',
-          name: 'Toko Sembako Jaya',
-          description: 'Your friendly neighborhood grocery store with the best prices',
-          whatsappNumber: '628123456789',
-          logo: 'https://via.placeholder.com/150'
-        };
-        
-        products = [
-          {
-            id: '1',
-            name: 'Indomie Goreng',
-            description: 'Instant fried noodles',
-            price: 3500,
-            image: 'https://via.placeholder.com/300',
-            category: 'Noodles'
-          },
-          {
-            id: '2',
-            name: 'Beras Cap Bunga 5kg',
-            description: 'Premium quality rice',
-            price: 68000,
-            image: 'https://via.placeholder.com/300',
-            category: 'Rice'
-          },
-          {
-            id: '3',
-            name: 'Minyak Goreng Filma 1L',
-            description: 'Cooking oil',
-            price: 24000,
-            image: 'https://via.placeholder.com/300',
-            category: 'Oil'
-          },
-          {
-            id: '4',
-            name: 'Telur Ayam 1kg',
-            description: 'Fresh chicken eggs',
-            price: 30000,
-            image: 'https://via.placeholder.com/300',
-            category: 'Eggs'
-          },
-          {
-            id: '5',
-            name: 'Gula Pasir 1kg',
-            description: 'White sugar',
-            price: 16000,
-            image: 'https://via.placeholder.com/300',
-            category: 'Sugar'
-          },
-          {
-            id: '6',
-            name: 'Teh Pucuk Harum 350ml',
-            description: 'Jasmine tea',
-            price: 5000,
-            image: 'https://via.placeholder.com/300',
-            category: 'Beverages'
-          }
-        ];
-        
-        // Extract categories from products
-        categories = ['all', ...new Set(products.map(p => p.category))];
-        
-        isLoading = false;
-      }, 1000);
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+      
+      store = await response.json();
     } catch (err) {
-      error = 'Failed to load store data. Please try again later.';
-      isLoading = false;
+      console.error('Failed to load store:', err);
+      error.store = err.message;
+    } finally {
+      loading.store = false;
     }
+  }
+  
+  // Fetch products for a store
+  async function fetchProducts() {
+    loading.products = true;
+    error.products = null;
+    
+    try {
+      const response = await fetch(`/api/stores/${storeId}/products`);
+      
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+      
+      products = await response.json();
+    } catch (err) {
+      console.error('Failed to load products:', err);
+      error.products = err.message;
+    } finally {
+      loading.products = false;
+    }
+  }
+  
+  // Initialize component
+  onMount(() => {
+    fetchStore();
+    fetchProducts();
   });
 </script>
 
-<div class="min-h-screen flex flex-col bg-gray-50">
-  <!-- Header with store info -->
-  <header class="bg-primary text-white py-4 sticky top-0 z-10 shadow-md">
-    <div class="container-custom">
-      <div class="flex justify-between items-center">
-        <!-- Store name/logo -->
-        <div class="flex items-center">
-          {#if store?.logo}
-            <img src={store.logo} alt="{store?.name} logo" class="w-10 h-10 rounded-full mr-3 bg-white p-1" />
-          {/if}
-          <h1 class="text-xl font-bold">{store?.name || 'Store'}</h1>
+<svelte:head>
+  {#if store}
+    <title>{store.name} | WhatsApp Catalogue</title>
+    <meta name="description" content={store.description || `Browse products from ${store.name} and order via WhatsApp`} />
+  {:else}
+    <title>Store | WhatsApp Catalogue</title>
+  {/if}
+</svelte:head>
+
+<div class="bg-gray-50 min-h-screen pb-20">
+  <!-- Store Header -->
+  {#if loading.store}
+    <div class="bg-gradient-to-r from-[#128C7E] to-[#25D366] py-16">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-center">
+          <div class="animate-pulse flex space-x-4 items-center">
+            <div class="rounded-full bg-white/20 h-24 w-24"></div>
+            <div class="space-y-2">
+              <div class="h-8 bg-white/20 rounded w-64"></div>
+              <div class="h-4 bg-white/20 rounded w-40"></div>
+              <div class="h-4 bg-white/20 rounded w-52"></div>
+            </div>
+          </div>
         </div>
-        
-        <!-- Cart button -->
-        <button 
-          class="relative"
-          on:click={() => showCart = !showCart}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
-          
-          {#if cart.length > 0}
-            <span class="absolute -top-2 -right-2 bg-secondary text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-              {cart.reduce((sum, item) => sum + item.quantity, 0)}
-            </span>
-          {/if}
-        </button>
       </div>
     </div>
-  </header>
-
-  <!-- Loading state -->
-  {#if isLoading}
-    <div class="flex-grow flex items-center justify-center">
-      <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-    </div>
-  
-  <!-- Error state -->
-  {:else if error}
-    <div class="flex-grow flex items-center justify-center p-4">
-      <div class="bg-red-100 text-red-800 p-4 rounded-md max-w-md text-center">
-        <p>{error}</p>
+  {:else if error.store}
+    <div class="bg-red-600 py-16 text-white">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <h1 class="text-2xl font-bold mb-4">Error Loading Store</h1>
+        <p class="mb-6">{error.store}</p>
         <button 
-          class="mt-4 btn btn-primary"
-          on:click={() => window.location.reload()}
+          class="px-4 py-2 bg-white text-red-600 rounded-md font-medium hover:bg-gray-100"
+          on:click={() => fetchStore()}
         >
           Try Again
         </button>
       </div>
     </div>
-  
-  <!-- Content loaded -->
   {:else if store}
-    <main class="flex-grow py-6">
-      <div class="container-custom">
-        <!-- Store description -->
-        <div class="mb-6 bg-white p-4 rounded-lg shadow-sm">
-          <p class="text-gray-700">{store.description}</p>
+    <div class={store.coverImage ? 'relative' : 'bg-gradient-to-r from-[#128C7E] to-[#25D366]'}>
+      {#if store.coverImage}
+        <div 
+          class="absolute inset-0 bg-center bg-cover"
+          style={`background-image: url(${store.coverImage})`}
+        >
+          <div class="absolute inset-0 bg-black/40"></div>
         </div>
-        
-        <!-- Search and filter bar -->
-        <div class="flex flex-col md:flex-row gap-4 mb-6">
-          <!-- Search input -->
-          <div class="flex-grow">
-            <input
-              type="text"
-              bind:value={searchQuery}
-              placeholder="Search products..."
-              class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
-          
-          <!-- Category filter -->
-          <div class="md:w-1/3">
-            <select 
-              bind:value={selectedCategory}
-              class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              {#each categories as category}
-                <option value={category}>{category === 'all' ? 'All Categories' : category}</option>
-              {/each}
-            </select>
-          </div>
-        </div>
-        
-        <!-- Products grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {#each filteredProducts as product (product.id)}
-            <div class="bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-              <div class="h-48 bg-gray-100 flex items-center justify-center">
-                <img 
-                  src={product.image} 
-                  alt={product.name} 
-                  class="h-full w-full object-cover"
-                />
-              </div>
-              
-              <div class="p-4">
-                <h3 class="font-semibold text-lg mb-1">{product.name}</h3>
-                <p class="text-gray-600 text-sm mb-2">{product.description}</p>
-                <p class="text-primary font-bold">{formatPrice(product.price)}</p>
-                
-                <button 
-                  class="mt-3 w-full btn btn-primary py-1.5"
-                  on:click={() => addToCart(product)}
-                >
-                  Add to Cart
-                </button>
-              </div>
-            </div>
-          {/each}
-          
-          {#if filteredProducts.length === 0}
-            <div class="col-span-full py-12 text-center text-gray-500">
-              <p>No products found. Try a different search or category.</p>
-            </div>
-          {/if}
-        </div>
-      </div>
-    </main>
-    
-    <!-- Footer -->
-    <footer class="bg-gray-800 text-white py-4 mt-auto">
-      <div class="container-custom text-center text-sm">
-        <p>© 2025 {store.name}. Powered by WhatsApp Catalogue.</p>
-      </div>
-    </footer>
-    
-    <!-- Shopping Cart Sidebar -->
-    {#if showCart}
-      <div class="fixed inset-0 bg-black bg-opacity-50 z-20" on:click={() => showCart = false}></div>
+      {/if}
       
-      <div class="fixed top-0 right-0 h-full w-full sm:w-96 bg-white shadow-lg z-30 transform transition-transform duration-300">
-        <div class="flex flex-col h-full">
-          <!-- Cart header -->
-          <div class="bg-primary text-white p-4 flex justify-between items-center">
-            <h2 class="text-xl font-bold">Your Cart</h2>
-            <button on:click={() => showCart = false}>
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          
-          <!-- Cart content -->
-          <div class="flex-grow overflow-y-auto p-4">
-            {#if cart.length === 0}
-              <div class="h-full flex flex-col items-center justify-center text-gray-500">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-                <p>Your cart is empty</p>
-                <button 
-                  class="mt-4 text-primary font-medium hover:underline"
-                  on:click={() => showCart = false}
-                >
-                  Continue Shopping
-                </button>
-              </div>
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 relative">
+        <div class="flex flex-col md:flex-row items-center md:items-start text-center md:text-left gap-6">
+          <div class="w-28 h-28 bg-white rounded-full overflow-hidden shadow-lg flex-shrink-0">
+            {#if store.logo}
+              <img src={store.logo} alt={store.name} class="w-full h-full object-cover" />
             {:else}
-              <ul class="space-y-4">
-                {#each cart as item (item.id)}
-                  <li class="flex border-b pb-4">
-                    <div class="w-20 h-20 flex-shrink-0 bg-gray-100 rounded-md overflow-hidden">
-                      <img src={item.image} alt={item.name} class="w-full h-full object-cover" />
-                    </div>
-                    
-                    <div class="ml-4 flex-grow">
-                      <h4 class="font-medium">{item.name}</h4>
-                      <p class="text-gray-600 text-sm">{formatPrice(item.price)}</p>
-                      
-                      <div class="mt-2 flex items-center">
-                        <button 
-                          class="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-l-md hover:bg-gray-100"
-                          on:click={() => updateQuantity(item.id, item.quantity - 1)}
-                        >
-                          -
-                        </button>
-                        <input 
-                          type="number" 
-                          min="1" 
-                          bind:value={item.quantity}
-                          on:input={(e) => updateQuantity(item.id, parseInt(e.target.value) || 1)}
-                          class="w-12 h-8 text-center border-y border-gray-300"
-                        />
-                        <button 
-                          class="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-r-md hover:bg-gray-100"
-                          on:click={() => updateQuantity(item.id, item.quantity + 1)}
-                        >
-                          +
-                        </button>
-                        
-                        <button 
-                          class="ml-auto text-red-500 hover:text-red-700"
-                          on:click={() => removeFromCart(item.id)}
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  </li>
-                {/each}
-              </ul>
+              <div class="w-full h-full bg-[#25D366] flex items-center justify-center">
+                <span class="text-white font-bold text-3xl">
+                  {store.name ? store.name.charAt(0).toUpperCase() : 'S'}
+                </span>
+              </div>
             {/if}
           </div>
           
-          <!-- Cart footer -->
-          {#if cart.length > 0}
-            <div class="border-t p-4">
-              <div class="flex justify-between items-center mb-4">
-                <span class="font-medium">Total:</span>
-                <span class="font-bold text-xl">{formatPrice(totalPrice)}</span>
-              </div>
+          <div class="text-white">
+            <h1 class="text-3xl font-bold mb-2">{store.name}</h1>
+            {#if store.description}
+              <p class="text-white/90 mb-4 max-w-2xl">{store.description}</p>
+            {/if}
+            
+            <div class="flex flex-wrap justify-center md:justify-start gap-4 text-sm">
+              {#if store.location}
+                <div class="flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+                  </svg>
+                  <span>{store.location}</span>
+                </div>
+              {/if}
               
-              <button 
-                class="btn btn-primary w-full py-3 flex items-center justify-center"
-                on:click={checkoutViaWhatsApp}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
-                </svg>
-                Order via WhatsApp
-              </button>
+              {#if store.businessHours}
+                <div class="flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+                  </svg>
+                  <span>{store.businessHours}</span>
+                </div>
+              {/if}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+  
+  <!-- Products Section -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    {#if loading.products}
+      <div class="flex justify-center py-12">
+        <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#25d366]"></div>
+      </div>
+    {:else if error.products}
+      <div class="bg-red-50 p-6 rounded-lg text-center text-red-700 max-w-lg mx-auto">
+        <p class="text-xl font-semibold mb-2">Failed to load products</p>
+        <p>{error.products}</p>
+        <button 
+          class="mt-4 px-4 py-2 bg-red-100 text-red-800 rounded hover:bg-red-200 transition-colors"
+          on:click={() => fetchProducts()}
+        >
+          Try Again
+        </button>
+      </div>
+    {:else if products.length === 0}
+      <div class="bg-gray-100 p-10 rounded-lg text-center max-w-lg mx-auto">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+        </svg>
+        <h3 class="text-xl font-semibold text-gray-700 mb-2">No Products Available</h3>
+        <p class="text-gray-600">This store hasn't added any products yet.</p>
+      </div>
+    {:else}
+      <div class="flex flex-col-reverse lg:flex-row">
+        <!-- Products Grid -->
+        <div class="w-full lg:w-2/3 pr-0 lg:pr-8">
+          <h2 class="text-2xl font-bold text-gray-900 mb-6">Products</h2>
+          
+          <!-- Featured Products -->
+          {#if products.some(p => p.featured)}
+            <div class="mb-8">
+              <h3 class="text-lg font-medium text-gray-900 mb-4">Featured</h3>
+              <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                {#each products.filter(p => p.featured && p.active) as product (product.id)}
+                  <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
+                    {#if product.image}
+                      <div class="aspect-w-16 aspect-h-9">
+                        <img src={product.image} alt={product.name} class="w-full h-48 object-cover" />
+                      </div>
+                    {:else}
+                      <div class="w-full h-48 bg-gray-200 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                    {/if}
+                    
+                    <div class="p-4">
+                      <div class="flex justify-between items-start">
+                        <div>
+                          <h3 class="text-lg font-medium text-gray-900">{product.name}</h3>
+                          <p class="text-[#25D366] font-semibold">{formatPrice(product.price)}</p>
+                        </div>
+                        
+                        <span class="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">Featured</span>
+                      </div>
+                      
+                      {#if product.description}
+                        <p class="text-gray-600 my-2 text-sm line-clamp-2">{product.description}</p>
+                      {/if}
+                      
+                      <div class="mt-3 flex">
+                        <button 
+                          on:click={() => addToCart(product)}
+                          class="flex-1 bg-[#25D366] text-white py-2 rounded-md hover:bg-[#1da051] transition-colors"
+                        >
+                          Add to Cart
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                {/each}
+              </div>
             </div>
           {/if}
+          
+          <!-- All Products -->
+          <div>
+            <h3 class="text-lg font-medium text-gray-900 mb-4">All Products</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+              {#each products.filter(p => p.active) as product (product.id)}
+                <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
+                  {#if product.image}
+                    <div class="aspect-w-16 aspect-h-9">
+                      <img src={product.image} alt={product.name} class="w-full h-48 object-cover" />
+                    </div>
+                  {:else}
+                    <div class="w-full h-48 bg-gray-200 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                  {/if}
+                  
+                  <div class="p-4">
+                    <div class="flex justify-between items-start">
+                      <div>
+                        <h3 class="text-lg font-medium text-gray-900">{product.name}</h3>
+                        <p class="text-[#25D366] font-semibold">{formatPrice(product.price)}</p>
+                      </div>
+                      
+                      {#if product.category}
+                        <span class="bg-gray-100 text-gray-800 text-xs font-semibold px-2 py-1 rounded">{product.category}</span>
+                      {/if}
+                    </div>
+                    
+                    {#if product.description}
+                      <p class="text-gray-600 my-2 text-sm line-clamp-2">{product.description}</p>
+                    {/if}
+                    
+                    <div class="mt-3 flex">
+                      <button 
+                        on:click={() => addToCart(product)}
+                        class="flex-1 bg-[#25D366] text-white py-2 rounded-md hover:bg-[#1da051] transition-colors"
+                      >
+                        Add to Cart
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </div>
+        </div>
+        
+        <!-- Cart Sidebar -->
+        <div class="w-full lg:w-1/3 mb-6 lg:mb-0">
+          <div class="bg-white rounded-lg shadow-md p-6 sticky top-4">
+            <h2 class="text-xl font-bold text-gray-900 mb-4">Your Order</h2>
+            
+            {#if cart.length === 0}
+              <div class="py-8 text-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <p class="text-gray-500">Your cart is empty</p>
+                <p class="text-gray-500 text-sm mt-1">Add some products to order</p>
+              </div>
+            {:else}
+              <div class="mb-4 divide-y divide-gray-200">
+                {#each cart as item (item.id)}
+                  <div class="py-3 flex justify-between items-center">
+                    <div>
+                      <p class="text-gray-900 font-medium">{item.name}</p>
+                      <p class="text-gray-600 text-sm">{formatPrice(item.price)} x {item.quantity}</p>
+                    </div>
+                    <div class="flex items-center">
+                      <p class="font-semibold text-gray-900 mr-3">{formatPrice(item.price * item.quantity)}</p>
+                      <div class="flex border border-gray-300 rounded">
+                        <button 
+                          on:click={() => removeFromCart(item.id)}
+                          class="px-2 py-1 text-gray-600 hover:bg-gray-100"
+                        >
+                          -
+                        </button>
+                        <span class="px-2 py-1 border-l border-r border-gray-300 bg-gray-50">{item.quantity}</span>
+                        <button 
+                          on:click={() => addToCart(item)}
+                          class="px-2 py-1 text-gray-600 hover:bg-gray-100"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+              
+              <div class="py-3 border-t border-gray-200">
+                <div class="flex justify-between items-center font-bold text-lg text-gray-900">
+                  <span>Total</span>
+                  <span>{formatPrice(cart.reduce((sum, item) => sum + (item.price * item.quantity), 0))}</span>
+                </div>
+              </div>
+              
+              <div class="mt-4">
+                <a 
+                  href={getWhatsAppOrderUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="block w-full text-center bg-[#25D366] text-white py-3 rounded-md font-medium hover:bg-[#1da051] transition-colors"
+                >
+                  Order via WhatsApp
+                </a>
+                <p class="text-xs text-gray-500 mt-2 text-center">
+                  Your order details will be sent to the store's WhatsApp.
+                </p>
+              </div>
+            {/if}
+          </div>
         </div>
       </div>
     {/if}
-  {/if}
+  </div>
+  
+  <!-- Footer -->
+  <footer class="bg-white py-8 mt-16 border-t border-gray-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <p class="text-gray-500 text-sm">
+        © {new Date().getFullYear()} WhatsApp Catalogue. All rights reserved.
+      </p>
+      <p class="text-gray-500 text-sm mt-2">
+        WhatsApp is a trademark of Meta Platforms, Inc.
+      </p>
+    </div>
+  </footer>
 </div>

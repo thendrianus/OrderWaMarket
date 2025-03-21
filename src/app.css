@@ -2,40 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Global Styles */
 :root {
-  font-family: 'Inter', sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  color-scheme: light dark;
+  --primary-color: #25D366;
+  --secondary-color: #128C7E;
+  --dark-color: #075E54;
+  --light-color: #DCF8C6;
+  --danger-color: #ff5252;
+  --success-color: #4CAF50;
+  --warning-color: #FFC107;
+  --info-color: #2196F3;
+  --white-color: #FFFFFF;
+  --black-color: #000000;
+  --gray-color: #718096;
+  --gray-light-color: #E2E8F0;
+  --gray-dark-color: #2D3748;
+}
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+body {
+  font-family: 'Inter', 'Roboto', sans-serif;
+  margin: 0;
+  padding: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-  background-color: #f8f9fa;
+.btn {
+  @apply px-4 py-2 rounded-md text-white font-medium;
 }
 
-@layer components {
-  .btn {
-    @apply px-4 py-2 rounded-md font-medium transition-colors duration-200;
-  }
-  
-  .btn-primary {
-    @apply bg-primary text-white hover:bg-opacity-90;
-  }
-  
-  .btn-secondary {
-    @apply bg-secondary text-white hover:bg-opacity-90;
-  }
-  
-  .container-custom {
-    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
-  }
+.btn-primary {
+  @apply bg-[#25D366] hover:bg-[#128C7E] transition-colors;
+}
+
+.btn-secondary {
+  @apply bg-[#128C7E] hover:bg-[#075E54] transition-colors;
+}
+
+.btn-danger {
+  @apply bg-[#ff5252] hover:bg-[#ff1744] transition-colors;
+}
+
+.card {
+  @apply bg-white rounded-lg shadow-md p-4;
 }
