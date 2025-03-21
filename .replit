@@ -15,7 +15,7 @@ guessImports = true
 channel = "stable-24_05"
 
 [workflows]
-runButton = "Run Backend"
+runButton = "Run Frontend Dev"
 
 [[workflows.workflow]]
 name = "Run Backend"
