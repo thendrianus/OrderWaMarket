@@ -1,11 +1,15 @@
-[frontend]
-command = "bash ./run.sh"
-description = "Runs the frontend application"
-persistent = true
-port = 3000
+[Start application]
+type = workspace
+command = ./run.sh
+pattern = ./src/**
+pattern = ./public/**
+pattern = ./index.html
+pattern = ./vite.config.js
+pattern = ./svelte.config.js
+pattern = ./postcss.config.js
+pattern = ./tailwind.config.js
 
-[backend]
-command = "bash ./run-backend.sh"
-description = "Runs the backend application"
-persistent = true
-port = 8080
+[Start backend]
+type = workspace
+command = ./run-backend.sh
+pattern = ./backend/**

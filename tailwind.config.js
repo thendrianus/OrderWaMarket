@@ -7,15 +7,11 @@ export default {
   theme: {
     extend: {
       colors: {
-        whatsapp: {
-          green: '#25D366',
-          lightGreen: '#DCF8C6',
-          teal: '#128C7E',
-          blue: '#34B7F1',
+        'whatsapp': {
+          DEFAULT: '#25D366',
+          light: '#DCF8C6',
+          dark: '#1da051',
         }
-      },
-      fontFamily: {
-        sans: ['Inter', 'sans-serif'],
       },
     },
   },
